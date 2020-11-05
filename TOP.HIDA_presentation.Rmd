@@ -1,0 +1,327 @@
+---
+title: 'Dealing with imbalanced data: a practical approach'
+author: "Bruno A Lima"
+date: "June, 2nd 2020"
+output:
+  slidy_presentation: default
+  beamer_presentation: default
+bibliography: bibliography.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F, message = F)
+```
+
+## Introduction
+
+We define a dataset as imbalanced when the categories from the classification variable are not *approximately* equally represented.
+
+<img src="images/heads.png" alt="heads" style="float:right" width="100">
+
+## Introduction (cont.)
+
+In real life there are several examples of imbalanced data:
+
+-	A manufacturing assembly line where the number of defective products are significantly lower than those without defects
+-	A test to detect patients with cancer in a given residential area
+-	Investigations on credit card fraud detection
+
+<img src="images/heads.png" alt="heads" style="float:right" width="100">
+
+## Introduction (cont.)
+
+Usually, majority class is referred as negative class, while the minority one is the positive class. For learning algorithms based on imbalanced data, positive class instances are submerged in the negative class
+
+<img src="images/heads.png" alt="heads" style="float:right" width="100">
+
+## Introduction (cont.)
+
+Imbalances can be classified as:
+ 
+- intrinsic – when is a direct result of the nature of the dataspace. As a community test for HIV where the positive cases are residual when compared with negative ones. 
+ 
+- extrinsic – when imbalance depends on upon variable factors as time and storage. As an example we can think on a continuous stream of intrinsically balanced data that at a specific time period (due to same  kind of error) the acquired data can be imbalanced and in this case, we will have an intrinsic imbalanced data.
+ 
+<img src="images/heads.png" alt="heads" style="float:right" width="100">
+ 
+## Introduction (cont.)
+
+Imbalanced data compromise significantly the performance of most standard learning algorithms, this algorithms are not able to represent properly the distributive characteristics of the data and consequently fail to deliver acceptable accuracies across the classes of the data.
+
+<img src="images/heads.png" alt="heads" style="float:right" width="100">
+
+## Introduction (cont.)
+
+There are two major approaches to deal with imbalanced data: 
+
+- external methods that use resampling methods on the original imbalanced data in order to obtain a balanced input to train traditional learning algorithms.
+
+- internal methods that use modified learning algorithms so they are able to use original data without rebalance it.
+
+<img src="images/heads.png" alt="heads" style="float:right" width="100">
+
+## the Cervical cancer Data Set
+
+I will use a known (and feared) dataset to exemplify the problem.
+
+```{r}
+library(tidyverse)
+## read the data
+dataset<-read.csv("risk_factors_cervical_cancer.csv",na.strings = c("NA","?",""))
+
+# exclude redundante variables
+dataset<-dataset %>% select(-STDs, -Dx.Cancer, -Dx.CIN, -Dx.HPV)
+
+# identified categorical variables
+categorical<-c("Smokes", "Hormonal.Contraceptives", "IUD", 
+               "STDs.condylomatosis","STDs.cervical.condylomatosis", 
+               "STDs.vulvo.perineal.condylomatosis", "STDs.syphilis",
+               "STDs.pelvic.inflammatory.disease",
+               "STDs.genital.herpes","STDs.molluscum.contagiosum",
+               "STDs.AIDS", "STDs.HIV", "STDs.Hepatitis.B", "STDs.HPV",
+               "Hinselmann", "Schiller", "Dx",  
+               "Citology", "Biopsy")  
+
+# factorize it
+dataset<-dataset %>% mutate_at(categorical, ~factor(.,levels = 0:1, labels = c("no","yes")))
+```
+
+<img src="images/heads.png" alt="heads" style="float:right" width="100">
+
+## First approach
+To predict the outcome **Dx**, I will use 'the algorithm of my little finger' on the Cervical cancer Data Set.
+
+```{r,  echo=F, out.width = "300px"}
+knitr::include_graphics("images/litlef.jpg")
+```
+
+<img src="images/heads.png" alt="heads" style="float:right" width="100">
+
+## Let´s make some prediction
+
+With 'my little finger' algorithm, I predicted that noboby have cancer. 
+
+And I computed a confusion matrix:
+
+```{r}
+mlf<-factor(rep(0,dim(dataset)[1]), levels = 0:1, labels = c("no","yes"))
+
+library(caret)
+confusionMatrix(mlf, dataset$Dx)
+```
+
+<img src="images/heads.png" alt="heads" style="float:right" width="100">
+
+## Do we trust this result?
+
+As we learn from Game of Thrones
+
+```{r, echo=F, out.width = "400px"}
+knitr::include_graphics("images/lf.jpg")
+```
+
+**never trust Little Finger!**
+
+<img src="images/heads.png" alt="heads" style="float:right" width="100">
+
+## Imbalanced data
+We have a clear case of imbalanced data on the Cervical cancer Data Set
+
+```{r , out.width = "500px"}
+ggplot(dataset, aes(Dx)) + geom_bar() + theme_bw()
+
+```
+
+So, we have `r table(dataset$Dx)[2]` positive cases and `r table(dataset$Dx)[1]` negative cases for **Dx** (our clasification variable)
+
+<img src="images/heads.png" alt="heads" style="float:right" width="100">
+
+## Let's look at the data
+```{r amelia}
+library(Amelia)
+# missings on original data
+missmap(dataset)
+```
+
+With the `amelia` package we can look for missing data
+
+In this case, I will exclude from the analysis variables ` STDs..Time.since.first.diagnosis` and `STDs..Time.since.last.diagnosis`
+
+```{r}
+dataset<-dataset %>% select(-STDs..Time.since.first.diagnosis, -STDs..Time.since.last.diagnosis)
+```
+
+Although it would be advised to do an imputation of values where we have missing data, I did'nt do it. 
+
+<img src="images/heads.png" alt="heads" style="float:right" width="100">
+
+## Let's balance the data
+
+I will use 4 different methods for balance the data and likewise, I will have 4 different datasets to train a regression tree algorithm.
+
+Let's start with the `caret` package and by downsampling:
+```{r down}
+library(caret)
+set.seed(1)
+down_train <- downSample(x = dataset[, !colnames(dataset) %in% "Dx"],
+                         y = dataset$Dx)
+
+# we have to remane the Class variable
+names(down_train)[30]<-"Dx"
+
+table(down_train$Dx)
+```
+
+Now the upsampling:
+```{r up}
+set.seed(1)
+up_train <- upSample(x = dataset[, !colnames(dataset) %in% "Dx"],
+                         y = dataset$Dx)
+
+# we have to remane the Class variable
+names(up_train)[30]<-"Dx"
+table(up_train$Dx)
+```
+
+<img src="images/heads.png" alt="heads" style="float:right" width="100">
+
+## Let's balance the data
+
+With the package `DMwR` I will apply the method SMOTE 
+```{r smote}
+library(DMwR)
+set.seed(1)
+smote_train <- SMOTE(Dx ~ ., data  = dataset,
+                     perc.over = 400,perc.under=200)                         
+table(smote_train$Dx) 
+```
+
+and now ROSE (with the package `ROSE`):
+```{r rose}
+library(ROSE)
+set.seed(1)
+rose_train <- ROSE(Dx ~ ., data  = dataset)$data                         
+table(rose_train$Dx) 
+```
+
+<img src="images/heads.png" alt="heads" style="float:right" width="100">
+
+## Train 4 regression trees algorithms
+With the new 4 datasets we can fit the regresssion trees
+```{r train}
+metric <- "ROC"
+control <- trainControl(method = "repeatedcv",
+                        number = 10,
+                        repeats = 5,
+                        summaryFunction=twoClassSummary, 
+                        classProbs=TRUE,
+                        savePredictions = TRUE)
+
+set.seed(2)
+fit.rpart.down <- train(Dx ~ ., data=down_train, 
+                       method="rpart", metric=metric, trControl=control,
+                       na.action=na.exclude)
+
+set.seed(2)
+fit.rpart.up <- train(Dx ~ ., data=up_train, 
+                       method="rpart", metric=metric, trControl=control,
+                      na.action=na.exclude)
+
+set.seed(2)
+fit.rpart.smote <- train(Dx ~ ., data=smote_train, 
+                       method="rpart", metric=metric, trControl=control,
+                      na.action=na.exclude)
+
+set.seed(2)
+fit.rpart.rose <- train(Dx ~ ., data=rose_train, 
+                       method="rpart", metric=metric, trControl=control,
+                      na.action=na.exclude)
+
+```
+
+<img src="images/heads.png" alt="heads" style="float:right" width="100">
+
+## ROC curves
+we can see them in one plot:
+```{r ggroc}
+library(pROC)
+# combine the results
+ggroc<-rbind(data.frame(method = "Down", 
+                       sens=roc(fit.rpart.down$pred$obs,fit.rpart.down$pred$yes)$sensitivities,
+                       spec=roc(fit.rpart.down$pred$obs,fit.rpart.down$pred$yes)$specificities),
+             data.frame(method = "Up", 
+                       sens=roc(fit.rpart.up$pred$obs,fit.rpart.up$pred$yes)$sensitivities,
+                       spec=roc(fit.rpart.up$pred$obs,fit.rpart.up$pred$yes)$specificities),
+             data.frame(method = "SMOTE", 
+                       sens=roc(fit.rpart.smote$pred$obs,fit.rpart.smote$pred$yes)$sensitivities,
+                       spec=roc(fit.rpart.smote$pred$obs,fit.rpart.smote$pred$yes)$specificities),
+             data.frame(method = "ROSE", 
+                       sens=roc(fit.rpart.rose$pred$obs,fit.rpart.rose$pred$yes)$sensitivities,
+                       spec=roc(fit.rpart.rose$pred$obs,fit.rpart.rose$pred$yes)$specificities)
+)
+             
+custom_col <- c("#009E73", "#0072B2", "#D55E00", "#CC79A7")
+
+ggplot(ggroc, aes(x= 1-spec, y= sens, group = method)) +
+  geom_line(aes(color = method), size = 1) +
+  scale_color_manual(values = custom_col) +
+  geom_abline(intercept = 0, slope = 1, color = "gray", size = 1) +
+    theme_bw()
+
+```
+
+<img src="images/heads.png" alt="heads" style="float:right" width="100">
+
+## And compare accuracies
+
+```{r , out.width = "600px"}
+
+fit.models <- list(down.rpart=fit.rpart.down, 
+                   up.rpart=fit.rpart.up, 
+                   smote.rpart= fit.rpart.smote, 
+                   rose.rpart= fit.rpart.rose)
+
+
+results <- resamples(fit.models)
+
+dotplot(results)
+```
+
+In this exercise we obtained the best results with ROSE dataset. Although we can have a problem of overfitting.
+
+<img src="images/heads.png" alt="heads" style="float:right" width="100">
+
+## Real world framework
+
+- do exploratory data analysis
+- look for missing data
+- exclude variables with more than 80% missings
+- try to input data to other remaining missings
+- do data partition between training data set and testing data set
+- balance your training dataset
+- train your algorithms with the training dataset
+- test them in your testing dataset
+- **DO NOT** balance your testing dataset
+
+<img src="images/heads.png" alt="heads" style="float:right" width="100">
+
+## References
+
+  + Chawla, Nitesh V., Kevin W. Bowyer, Lawrence O. Hall, and W. Philip Kegelmeyer. 2002. “snopes.com: Two-Striped Telamonia Spider.” Journal of Artificial Intelligence Research 16 (Sept. 28): 321–57.
+  
+  + Dua, Dheeru, and Casey Graff. 2017. “UCI Machine Learning Repository.” University of California, Irvine, School of Information; Computer Sciences. http://archive.ics.uci.edu/ml.
+
+  + Gao, Ming, Xia Hong, Sheng Chen, Chris J. Harris, and Emad Khalaf. 2014. “PDFOS: PDF estimation based over-sampling for imbalanced two-class problems.” Neurocomputing 138. Elsevier: 248–59. 
+  
+  + He, Haibo, and Edwardo A. Garcia. 2009. “Learning from imbalanced data.” IEEE TRANSACTIONS ON KNOWLEDGE AND DATA ENGINEERING 21 (9): 1263–83. 
+  
+  + Honaker, James, Gary King, and Matthew Blackwell. 2011. “Amelia II: A Program for Missing Data.” Journal of Statistical Software 45 (7): 1–47.
+
+  + R Core Team. 2013. R: A Language and Environment for Statistical Computing. Vienna, Austria: R Foundation for Statistical Computing. http://www.R-project.org/.
+
+<img src="images/heads.png" alt="heads" style="float:right" width="100">
+
+## Cheers
+
+<img src="images/heads.png" alt="heads" style="float:right" width="100">
+
